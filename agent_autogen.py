@@ -100,7 +100,35 @@ def make_assistant() -> AssistantAgent:
     Raises:
         NotImplementedError: Remove this line once you implement the function.
     """
-    raise NotImplementedError("Implement make_assistant()")
+    from tools.code_tools import ALL_SCHEMAS
+    from autogen.oai.client import OpenAIClient
+    from openai import OpenAI
+    import time
+
+    class TrackedClient(OpenAIClient):
+        def __init__(self, config, **kwargs):
+            super().__init__(OpenAI(api_key=config["api_key"], base_url=config["base_url"],
+                                    default_headers=config.get("default_headers")))
+
+        def create(self, params):
+            started = time.monotonic()
+            params = dict(params)
+            params.pop("model_client_cls", None)
+            response = super().create(params)
+            usage = response.usage
+            tracker.record_step(usage.prompt_tokens, usage.completion_tokens,
+                                time.monotonic() - started)
+            return response
+
+    config = _llm_config()
+    config["cache_seed"] = None
+    config["config_list"][0]["model_client_cls"] = "TrackedClient"
+    agent = AssistantAgent(name="coder_agent", system_message=SYSTEM_PROMPT,
+                           llm_config=config)
+    for function, schema in zip((read_file, write_file, exec_python), ALL_SCHEMAS):
+        agent.register_for_llm(name=schema["name"], description=schema["description"])(function)
+    agent.register_model_client(model_client_cls=TrackedClient)
+    return agent
 
 
 def make_proxy() -> UserProxyAgent:
@@ -124,7 +152,14 @@ def make_proxy() -> UserProxyAgent:
     Raises:
         NotImplementedError: Remove this line once you implement the function.
     """
-    raise NotImplementedError("Implement make_proxy()")
+    proxy = UserProxyAgent(
+        name="user_proxy", human_input_mode="NEVER", max_consecutive_auto_reply=15,
+        is_termination_msg=lambda message: (message.get("content") or "").strip() == "DONE",
+        code_execution_config=False,
+    )
+    for function in (read_file, write_file, exec_python):
+        proxy.register_for_execution(name=function.__name__)(function)
+    return proxy
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +176,8 @@ def _record_usage(chat_result: autogen.ChatResult) -> None:
     usage = getattr(chat_result, "cost", {})
     # usage dict shape: {"usage_including_cached_inference": {model: {prompt_tokens, ...}}}
     for model_data in usage.get("usage_including_cached_inference", {}).values():
+        if not isinstance(model_data, dict):
+            continue
         prompt = model_data.get("prompt_tokens", 0)
         completion = model_data.get("completion_tokens", 0)
         if prompt or completion:
@@ -151,8 +188,15 @@ def _record_usage(chat_result: autogen.ChatResult) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+from run_support import isolated_run
+
+
+@isolated_run
 def run() -> str:
     """Initiate the two-agent chat and return the final assistant message."""
+    import time
+    tracker.steps.clear()
+    tracker._start = time.time()
     assistant = make_assistant()
     proxy = make_proxy()
 
@@ -161,7 +205,9 @@ def run() -> str:
     #   - message=TASK_DESCRIPTION
     #   - max_turns=15
     # Store the result in `result`, then call _record_usage(result).
-    raise NotImplementedError("Call proxy.initiate_chat() here")
+    result = proxy.initiate_chat(recipient=assistant, message=TASK_DESCRIPTION,
+                                 max_turns=15, cache=None)
+    # TrackedClient records each actual API response, not one aggregate step.
 
     tracker.print_summary()
 

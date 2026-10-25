@@ -102,7 +102,23 @@ def agent_node(state: AgentState) -> dict:
     Raises:
         NotImplementedError: Remove this line once you implement the function.
     """
-    raise NotImplementedError("Implement agent_node()")
+    from langchain_core.messages import SystemMessage
+    sdk = get_client()
+    model = ChatOpenAI(
+        client=sdk.chat.completions, root_client=sdk,
+        api_key=sdk.api_key, base_url=str(sdk.base_url),
+        model=DEFAULT_MODEL, temperature=0,
+    ).bind_tools(ALL_SCHEMAS)
+    messages = list(state["messages"])
+    if not messages or messages[0].type != "system":
+        messages.insert(0, SystemMessage(content=SYSTEM_PROMPT))
+    started = time.monotonic()
+    response = model.invoke(messages)
+    usage = response.response_metadata.get("token_usage", {})
+    tracker.record_step(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                        time.monotonic() - started)
+    return {"messages": [response], "step_count": state["step_count"] + 1,
+            "done": not response.tool_calls and "DONE" in str(response.content).split()}
 
 
 # ---------------------------------------------------------------------------
@@ -141,10 +157,16 @@ def build_graph() -> StateGraph:
 # Entry point
 # ---------------------------------------------------------------------------
 
+from run_support import isolated_run
+
+
+@isolated_run
 def run() -> str:
     """Run the agent and return its final message content."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
+    tracker.steps.clear()
+    tracker._start = time.time()
     app = build_graph()
     initial_state: AgentState = {
         "messages": [
@@ -155,7 +177,7 @@ def run() -> str:
         "done": False,
     }
 
-    final_state = app.invoke(initial_state)
+    final_state = app.invoke(initial_state, config={"recursion_limit": 2 * MAX_STEPS + 1})
     tracker.print_summary()
 
     last = final_state["messages"][-1]

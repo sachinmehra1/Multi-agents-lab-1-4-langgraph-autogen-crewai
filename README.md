@@ -201,3 +201,33 @@ All three agents must:
 You must also:
 5. Fill in at least 2 sections of `comparison/tradeoffs.md`
 6. Pass all non-skipped tests with `pytest tests/ -v`
+
+
+## Completed implementation: running this fork
+
+Use Python 3.12 and `pip install -r requirements-tested.txt`. These are the
+versions actually tested; the original broad requirements are retained for
+reference. In particular, AutoGen's classic API needs `pyautogen==0.2.35`.
+
+The starter's tests are at the repository root, so use `python -m pytest -q`.
+Lab 1.3's real API test requires `--run-llm`; Lab 1.4's supplied framework tests
+make live calls.
+
+For the course route, configure your own credentials using `.env.example`.
+For direct OpenAI, keep a private file outside the repository with `LLM_API_KEY`
+or `OPENAI_API_KEY`, then run:
+
+```sh
+python run_openai.py --env /absolute/path/to/private.env compare.py
+python run_openai.py --env /absolute/path/to/private.env pytest -q
+```
+
+The launcher does not persist keys. Verification used direct OpenAI, not Helicone.
+Upstream hardcoded credentials were removed from current files and setup scripts;
+the upstream history still requires credential rotation by its owner.
+
+See [verification results](verification/results.md), [actual comparison](comparison/results.json),
+[tradeoffs](comparison/tradeoffs.md), and [generated artifacts](comparison/artifacts).
+Each run uses a fresh workspace. The supplied tools/client/task files are unchanged.
+The original suite has 29 live tests; additional artifact checks are in
+`test_generated_artifacts.py`. Both are run by `pytest -q`.

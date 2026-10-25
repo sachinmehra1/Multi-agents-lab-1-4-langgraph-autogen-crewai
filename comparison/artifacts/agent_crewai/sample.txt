@@ -1,0 +1,1 @@
+Hello world! This is a sample text file. This file contains words, some of which repeat. Words like hello, world, and sample appear more than once. This is to test the word frequency function.

@@ -1,0 +1,4 @@
+Hello world! This is a sample text file.
+This file contains some words, some repeated words.
+Words are repeated to test the frequency count.
+Hello again, world!

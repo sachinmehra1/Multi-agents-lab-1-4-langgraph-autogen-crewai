@@ -3,8 +3,8 @@ echo "Starting secure environment setup (Generating config.yaml)..."
 
 CONFIG_DIR="$HOME/.continue"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
-HELICONE_API_KEY="sk-helicone-a2uncjy-xwleneq-qbj4wji-lfphjfi"
-OPENROUTER_API_KEY="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"
+: "${HELICONE_API_KEY:?Set your own Codespaces secret}"
+: "${OPENROUTER_API_KEY:?Set your own Codespaces secret}"
 
 echo "Installing Node.js dependencies..."
 npm install
